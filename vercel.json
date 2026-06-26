@@ -1,1 +1,7 @@
-{"version":2}
+{
+  "functions": {
+    "api/sku-generator.js": {
+      "maxDuration": 60
+    }
+  }
+}
