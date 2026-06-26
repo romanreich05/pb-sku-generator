@@ -36,7 +36,6 @@ module.exports = async (req, res) => {
   const store = STORES[shopDomain];
   if (!store) return res.status(200).json({ message: "Unknown store" });
 
-  // Vercel-compatible body reading
   let rawBody = "";
   if (typeof req.body === "string") {
     rawBody = req.body;
@@ -50,18 +49,19 @@ module.exports = async (req, res) => {
     });
   }
 
-  // TEMP: HMAC disabled for testing
+  // TEMP: HMAC disabled
   // const hmac = req.headers["x-shopify-hmac-sha256"];
   // const hash = crypto.createHmac("sha256", store.webhookSecret).update(rawBody).digest("base64");
   // if (hash !== hmac) return res.status(401).end();
 
-  res.status(200).json({ message: "Processing" });
-
   try {
     const product = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
-    console.log("Product received:", product.id, product.title); console.log("Token:", store.token ? "SET(" + store.token.slice(0,10) + "...)" : "UNDEFINED");
+    console.log("Product received:", product.id, product.title);
+    console.log("Token:", store.token ? "SET(" + store.token.slice(0,10) + "...)" : "UNDEFINED");
+    
     const existingSKUs = await getAllSKUs(shopDomain, store.token);
     console.log("Existing SKUs loaded:", existingSKUs.size);
+    
     for (const variant of product.variants || []) {
       if (variant.sku?.startsWith("PB-") && !existingSKUs.has(variant.sku)) continue;
       let sku, attempts = 0;
@@ -77,7 +77,10 @@ module.exports = async (req, res) => {
       console.log(`SKU gesetzt: ${variant.title} → ${sku} (${putRes.status})`);
       await new Promise(r => setTimeout(r, 300));
     }
+    
+    res.status(200).json({ message: "Done" });
   } catch(e) {
     console.error("ERROR:", e.message);
+    res.status(500).json({ error: e.message });
   }
 };
