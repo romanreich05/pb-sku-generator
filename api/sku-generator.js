@@ -59,7 +59,7 @@ module.exports = async (req, res) => {
 
   try {
     const product = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
-    console.log("Product received:", product.id, product.title);
+    console.log("Product received:", product.id, product.title); console.log("Token:", store.token ? "SET(" + store.token.slice(0,10) + "...)" : "UNDEFINED");
     const existingSKUs = await getAllSKUs(shopDomain, store.token);
     console.log("Existing SKUs loaded:", existingSKUs.size);
     for (const variant of product.variants || []) {
