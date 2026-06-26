@@ -31,25 +31,37 @@ function generateSKU(abbreviation, title, variantTitle) {
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") return res.status(405).end();
+
   const shopDomain = req.headers["x-shopify-shop-domain"];
   const store = STORES[shopDomain];
   if (!store) return res.status(200).json({ message: "Unknown store" });
 
-  const rawBody = await new Promise(resolve => {
-    let data = "";
-    req.on("data", chunk => data += chunk);
-    req.on("end", () => resolve(data));
-  });
+  // Vercel-compatible body reading
+  let rawBody = "";
+  if (typeof req.body === "string") {
+    rawBody = req.body;
+  } else if (req.body && typeof req.body === "object") {
+    rawBody = JSON.stringify(req.body);
+  } else {
+    rawBody = await new Promise(resolve => {
+      let data = "";
+      req.on("data", chunk => data += chunk);
+      req.on("end", () => resolve(data));
+    });
+  }
 
-  const hmac = req.headers["x-shopify-hmac-sha256"];
-  const hash = crypto.createHmac("sha256", store.webhookSecret).update(rawBody).digest("base64");
-  // TEMP: if (hash !== hmac) return res.status(401).end();
+  // TEMP: HMAC disabled for testing
+  // const hmac = req.headers["x-shopify-hmac-sha256"];
+  // const hash = crypto.createHmac("sha256", store.webhookSecret).update(rawBody).digest("base64");
+  // if (hash !== hmac) return res.status(401).end();
 
   res.status(200).json({ message: "Processing" });
 
   try {
-    const product = JSON.parse(rawBody);
+    const product = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
+    console.log("Product received:", product.id, product.title);
     const existingSKUs = await getAllSKUs(shopDomain, store.token);
+    console.log("Existing SKUs loaded:", existingSKUs.size);
     for (const variant of product.variants || []) {
       if (variant.sku?.startsWith("PB-") && !existingSKUs.has(variant.sku)) continue;
       let sku, attempts = 0;
@@ -57,13 +69,15 @@ module.exports = async (req, res) => {
         sku = generateSKU(store.abbreviation, product.title, variant.title || "");
         attempts++;
       } while (existingSKUs.has(sku) && attempts < 10);
-      await fetch(`https://${shopDomain}/admin/api/2024-01/variants/${variant.id}.json`, {
+      const putRes = await fetch(`https://${shopDomain}/admin/api/2024-01/variants/${variant.id}.json`, {
         method: "PUT",
         headers: { "X-Shopify-Access-Token": store.token, "Content-Type": "application/json" },
         body: JSON.stringify({ variant: { id: variant.id, sku } })
       });
-      console.log(`SKU gesetzt: ${variant.title} → ${sku}`);
+      console.log(`SKU gesetzt: ${variant.title} → ${sku} (${putRes.status})`);
       await new Promise(r => setTimeout(r, 300));
     }
-  } catch(e) { console.error(e.message); }
+  } catch(e) {
+    console.error("ERROR:", e.message);
+  }
 };
