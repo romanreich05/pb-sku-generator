@@ -24,7 +24,7 @@ async function getAllSKUs(shopDomain, token) {
 
 function generateSKU(abbreviation, title, variantTitle) {
   const titlePart = title.toUpperCase().replace(/[^A-Z0-9]+/g, "-").slice(0, 12);
-  const variantPart = variantTitle ? "-" + variantTitle.toUpperCase().replace(/[^A-Z0-9]+/g, "-").slice(0, 6) : "";
+  const variantPart = variantTitle && variantTitle !== "Default Title" ? "-" + variantTitle.toUpperCase().replace(/[^A-Z0-9]+/g, "-").slice(0, 6) : "";
   const suffix = crypto.randomBytes(2).toString("hex").toUpperCase();
   return `PB-${abbreviation}-${titlePart}${variantPart}-${suffix}`;
 }
