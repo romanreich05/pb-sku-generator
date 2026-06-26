@@ -50,7 +50,7 @@ module.exports = async (req, res) => {
     const product = JSON.parse(rawBody);
     const existingSKUs = await getAllSKUs(shopDomain, store.token);
     for (const variant of product.variants || []) {
-      if (variant.sku?.startsWith("PB-")) continue;
+      if (variant.sku?.startsWith("PB-") && !existingSKUs.has(variant.sku)) continue;
       let sku, attempts = 0;
       do {
         sku = generateSKU(store.abbreviation, product.title, variant.title || "");
