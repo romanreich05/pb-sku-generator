@@ -8,6 +8,22 @@ const STORES = {
   }
 };
 
+function getProductType(title) {
+  const t = title.toUpperCase();
+  if (t.includes("OVERSIZED SHIRT")) return "OS";
+  if (t.includes("OVERSIZED HOODIE")) return "OH";
+  if (t.includes("BASIC SHIRT")) return "TS";
+  if (t.includes("REGULAR SHIRT")) return "TS";
+  if (t.includes("BASIC HOODIE")) return "HO";
+  if (t.includes("REGULAR HOODIE")) return "HO";
+  if (t.includes("T-SHIRT")) return "TS";
+  if (t.includes("LONGSLEEVE")) return "LS";
+  if (t.includes("JERSEY")) return "OS";
+  if (t.includes("HOODIE")) return "OH";
+  if (t.includes("SHIRT")) return "OS";
+  return "XX";
+}
+
 async function getAllSKUs(shopDomain, token) {
   const skus = new Set();
   let url = `https://${shopDomain}/admin/api/2024-01/variants.json?limit=250&fields=sku`;
@@ -22,11 +38,19 @@ async function getAllSKUs(shopDomain, token) {
   return skus;
 }
 
-function generateSKU(abbreviation, title, variantTitle) {
-  const titlePart = title.toUpperCase().replace(/[^A-Z0-9]+/g, "-").slice(0, 12);
-  const variantPart = variantTitle && variantTitle !== "Default Title" ? "-" + variantTitle.toUpperCase().replace(/[^A-Z0-9]+/g, "-").slice(0, 6) : "";
+function generateSKU(abbreviation, productType, title, variantTitle) {
+  // Produkttyp + Name aus Titel extrahieren (Produkttyp-Keywords entfernen)
+  const cleanTitle = title
+    .toUpperCase()
+    .replace(/OVERSIZED SHIRT|OVERSIZED HOODIE|BASIC SHIRT|REGULAR SHIRT|BASIC HOODIE|REGULAR HOODIE|T-SHIRT|LONGSLEEVE|JERSEY|HOODIE|SHIRT/g, "")
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 12);
+  const variantPart = variantTitle && variantTitle !== "Default Title"
+    ? "-" + variantTitle.toUpperCase().replace(/[^A-Z0-9]+/g, "-").slice(0, 6)
+    : "";
   const suffix = crypto.randomBytes(2).toString("hex").toUpperCase();
-  return `PB-${abbreviation}-${titlePart}${variantPart}-${suffix}`;
+  return `PB-${abbreviation}-${productType}-${cleanTitle}${variantPart}-${suffix}`;
 }
 
 module.exports = async (req, res) => {
@@ -57,16 +81,18 @@ module.exports = async (req, res) => {
   try {
     const product = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
     console.log("Product received:", product.id, product.title);
-    console.log("Token:", store.token ? "SET(" + store.token.slice(0,10) + "...)" : "UNDEFINED");
-    
+
+    const productType = getProductType(product.title);
+    console.log("Product type:", productType);
+
     const existingSKUs = await getAllSKUs(shopDomain, store.token);
     console.log("Existing SKUs loaded:", existingSKUs.size);
-    
+
     for (const variant of product.variants || []) {
       if (variant.sku?.startsWith("PB-") && !existingSKUs.has(variant.sku)) continue;
       let sku, attempts = 0;
       do {
-        sku = generateSKU(store.abbreviation, product.title, variant.title || "");
+        sku = generateSKU(store.abbreviation, productType, product.title, variant.title || "");
         attempts++;
       } while (existingSKUs.has(sku) && attempts < 10);
       const putRes = await fetch(`https://${shopDomain}/admin/api/2024-01/variants/${variant.id}.json`, {
@@ -77,7 +103,7 @@ module.exports = async (req, res) => {
       console.log(`SKU gesetzt: ${variant.title} → ${sku} (${putRes.status})`);
       await new Promise(r => setTimeout(r, 300));
     }
-    
+
     res.status(200).json({ message: "Done" });
   } catch(e) {
     console.error("ERROR:", e.message);
